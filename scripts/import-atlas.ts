@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "../generated/prisma/client";
+import { resolveDatabaseUrl } from "../lib/database-url";
 
 type AtlasRecord = {
   kilavuzKodu: number | string;
@@ -37,7 +38,7 @@ type AtlasResponse = {
 };
 
 const endpoint = "https://yokatlas.yok.gov.tr/api/tercih-kilavuz/search";
-const databaseUrl = process.env.DATABASE_URL ?? "file:./dev.db";
+const databaseUrl = resolveDatabaseUrl();
 const prisma = new PrismaClient({
   adapter: new PrismaBetterSqlite3({ url: databaseUrl }),
 });

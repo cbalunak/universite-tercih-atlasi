@@ -1,15 +1,8 @@
 import Database from "better-sqlite3";
-import path from "node:path";
-import process from "node:process";
+import { resolveDatabaseUrl, sqlitePathFromDatabaseUrl } from "../lib/database-url";
 
-function sqlitePathFromUrl(url: string) {
-  if (!url.startsWith("file:")) return url;
-  const filePath = url.replace(/^file:/, "");
-  return path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
-}
-
-const databaseUrl = process.env.DATABASE_URL ?? "file:./dev.db";
-const db = new Database(sqlitePathFromUrl(databaseUrl));
+const databaseUrl = resolveDatabaseUrl();
+const db = new Database(sqlitePathFromDatabaseUrl(databaseUrl));
 
 db.pragma("foreign_keys = ON");
 
@@ -90,4 +83,4 @@ CREATE TABLE IF NOT EXISTS UserState (
 `);
 
 db.close();
-console.log(`SQLite şeması hazır: ${sqlitePathFromUrl(databaseUrl)}`);
+console.log(`SQLite şeması hazır: ${sqlitePathFromDatabaseUrl(databaseUrl)}`);

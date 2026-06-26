@@ -3,6 +3,7 @@
 cd "$(dirname "$0")"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+export DATABASE_URL="file:$PWD/dev.db"
 
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
   source "$HOME/.nvm/nvm.sh"

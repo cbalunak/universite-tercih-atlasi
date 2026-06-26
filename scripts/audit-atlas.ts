@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient, type Program, type ProgramYear } from "../generated/prisma/client";
+import { resolveDatabaseUrl } from "../lib/database-url";
 
 type ProgramWithYears = Program & { years: ProgramYear[] };
 
@@ -38,7 +39,7 @@ type ComparisonIssue = {
   program: string;
 };
 
-const databaseUrl = process.env.DATABASE_URL ?? "file:./dev.db";
+const databaseUrl = resolveDatabaseUrl();
 const prisma = new PrismaClient({
   adapter: new PrismaBetterSqlite3({ url: databaseUrl }),
 });
