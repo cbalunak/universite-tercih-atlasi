@@ -52,6 +52,51 @@ if [ ! -f "generated/prisma/client.ts" ]; then
   fi
 fi
 
+if ! node <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const dbPath = path.join(process.cwd(), "dev.db");
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+if (!fs.existsSync(dbPath)) {
+  fail(`dev.db bulunamadı: ${dbPath}`);
+}
+
+const stat = fs.statSync(dbPath);
+if (stat.size < 1_000_000) {
+  fail(`dev.db çok küçük görünüyor (${stat.size} byte). Atlas verisi olmayan boş dosya olabilir.`);
+}
+
+const Database = require("better-sqlite3");
+const db = new Database(dbPath, { readonly: true });
+try {
+  const programTable = db.prepare("select name from sqlite_master where type = 'table' and name = 'Program'").get();
+  if (!programTable) fail("dev.db içinde Program tablosu yok.");
+
+  const count = db.prepare("select count(*) as count from Program").get().count;
+  if (count < 1000) fail(`dev.db içindeki program sayısı düşük görünüyor: ${count}`);
+
+  console.log(`Veritabanı hazır: ${count} program`);
+} finally {
+  db.close();
+}
+NODE
+then
+  echo ""
+  echo "Veritabanı hazır değil."
+  echo "Ana bilgisayardaki dev.db dosyasını bu klasöre kopyalayın:"
+  echo "$PWD/dev.db"
+  echo ""
+  echo "Doğru dosya yaklaşık 18 MB olmalı."
+  read "?Kapatmak için Enter'a basın..."
+  exit 1
+fi
+
 echo "Üniversite Tercih Atlası başlatılıyor..."
 
 if curl --max-time 2 -fsS "http://127.0.0.1:3000" >/dev/null 2>&1; then
