@@ -4,6 +4,10 @@ cd "$(dirname "$0")"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  source "$HOME/.nvm/nvm.sh"
+fi
+
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm bulunamadı. Node.js kurulu değil ya da Terminal yolu tanımıyor."
   echo "Node.js kurulduktan sonra bu dosyayı tekrar açın."
@@ -21,7 +25,8 @@ NODE
 
 if [ "$NODE_OK" != "1" ]; then
   echo "Node.js sürümü eski: $NODE_VERSION"
-  echo "Bu uygulama için Node.js 22 LTS veya daha yeni bir sürüm gerekiyor."
+  echo "Kullanılan node yolu: $(command -v node)"
+  echo "Bu uygulama için Node.js 22.12+ LTS veya daha yeni desteklenen bir sürüm gerekiyor."
   echo "https://nodejs.org adresinden Node.js 22 LTS kurup Terminal'i yeniden açın."
   read "?Kapatmak için Enter'a basın..."
   exit 1
