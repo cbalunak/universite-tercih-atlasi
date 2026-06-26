@@ -11,6 +11,22 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
+NODE_VERSION="$(node -p 'process.versions.node' 2>/dev/null)"
+NODE_OK="$(node - <<'NODE'
+const [major, minor] = process.versions.node.split(".").map(Number);
+const ok = major >= 24 || (major === 22 && minor >= 12) || (major === 20 && minor >= 19);
+process.stdout.write(ok ? "1" : "0");
+NODE
+)"
+
+if [ "$NODE_OK" != "1" ]; then
+  echo "Node.js sürümü eski: $NODE_VERSION"
+  echo "Bu uygulama için Node.js 22 LTS veya daha yeni bir sürüm gerekiyor."
+  echo "https://nodejs.org adresinden Node.js 22 LTS kurup Terminal'i yeniden açın."
+  read "?Kapatmak için Enter'a basın..."
+  exit 1
+fi
+
 if [ ! -d "node_modules" ]; then
   echo "Paketler kuruluyor..."
   if ! npm install; then
