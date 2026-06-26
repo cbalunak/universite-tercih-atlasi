@@ -100,15 +100,6 @@ fi
 
 echo "Üniversite Tercih Atlası başlatılıyor..."
 
-if curl --max-time 2 -fsS "http://127.0.0.1:3000" >/dev/null 2>&1; then
-  echo "Site zaten çalışıyor."
-  echo "Adres: http://127.0.0.1:3000"
-  open "http://127.0.0.1:3000"
-  echo ""
-  read "?Kapatmak için Enter'a basın..."
-  exit 0
-fi
-
 EXISTING_PID="$(lsof -tiTCP:3000 -sTCP:LISTEN | head -n 1)"
 if [ -n "$EXISTING_PID" ]; then
   EXISTING_COMMAND="$(ps -p "$EXISTING_PID" -o command= 2>/dev/null)"
