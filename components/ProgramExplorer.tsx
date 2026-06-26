@@ -216,6 +216,17 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debouncedValue;
 }
 
+async function readApiResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `İstek başarısız oldu: ${response.status}`);
+  }
+  if (!text.trim()) {
+    throw new Error("Sunucudan boş yanıt geldi.");
+  }
+  return JSON.parse(text) as T;
+}
+
 export default function ProgramExplorer() {
   const [filters, setFilters] = useState<ProgramFilters>({});
   const [data, setData] = useState<ApiResponse>(emptyResponse);
@@ -332,11 +343,12 @@ export default function ProgramExplorer() {
 
     setLoading(true);
     fetch(`/api/programs?${params.toString()}`, { signal: controller.signal })
-      .then((response) => response.json())
+      .then((response) => readApiResponse<ApiResponse>(response))
       .then((payload: ApiResponse) => setData(payload))
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         console.error(error);
+        setData(emptyResponse);
       })
       .finally(() => setLoading(false));
 

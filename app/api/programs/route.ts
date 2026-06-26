@@ -85,62 +85,73 @@ async function loadPrograms(codes?: string[]) {
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const codes = searchParams.get("codes")?.split(",").map((code) => code.trim()).filter(Boolean);
-  const limit = Number(searchParams.get("limit") ?? "700");
+  try {
+    const { searchParams } = new URL(request.url);
+    const codes = searchParams.get("codes")?.split(",").map((code) => code.trim()).filter(Boolean);
+    const limit = Number(searchParams.get("limit") ?? "700");
 
-  const allItems = await loadPrograms(codes);
-  const minRank = Number(searchParams.get("minRank") || "0");
-  const maxRank = Number(searchParams.get("maxRank") || "0");
-  const queryTokens = searchTokens(searchParams.get("q"));
-  const hasSuccessRank = allItems.some((item) => item.latest?.successRank !== null && item.latest?.successRank !== undefined);
-  const scoreTypes = multiValues(searchParams, "scoreType");
-  const universities = multiValues(searchParams, "universityName");
-  const programNames = multiValues(searchParams, "programName");
-  const cities = multiValues(searchParams, "city");
-  const universityTypes = multiValues(searchParams, "universityType");
-  const feeTypes = multiValues(searchParams, "feeType");
-  const educationTypes = multiValues(searchParams, "educationType");
+    const allItems = await loadPrograms(codes);
+    const minRank = Number(searchParams.get("minRank") || "0");
+    const maxRank = Number(searchParams.get("maxRank") || "0");
+    const queryTokens = searchTokens(searchParams.get("q"));
+    const hasSuccessRank = allItems.some((item) => item.latest?.successRank !== null && item.latest?.successRank !== undefined);
+    const scoreTypes = multiValues(searchParams, "scoreType");
+    const universities = multiValues(searchParams, "universityName");
+    const programNames = multiValues(searchParams, "programName");
+    const cities = multiValues(searchParams, "city");
+    const universityTypes = multiValues(searchParams, "universityType");
+    const feeTypes = multiValues(searchParams, "feeType");
+    const educationTypes = multiValues(searchParams, "educationType");
 
-  const filtered = allItems.filter((item) => {
-    if (!item.latest || item.latest.year !== 2025) return false;
-    if (
-      queryTokens.length > 0 &&
-      !queryTokens.every((token) => textIncludes(`${item.universityName} ${item.programName}`, token))
-    ) {
-      return false;
-    }
-    if (scoreTypes.length > 0 && !scoreTypes.includes(item.scoreType)) return false;
-    if (universities.length > 0 && !universities.includes(item.universityName)) return false;
-    if (programNames.length > 0 && !programNames.some((programName) => textIncludes(item.programName, programName))) return false;
-    if (cities.length > 0 && (!item.city || !cities.includes(item.city))) return false;
-    if (universityTypes.length > 0 && !universityTypes.includes(item.universityType)) return false;
-    if (feeTypes.length > 0 && !feeTypes.includes(item.feeType)) return false;
-    if (educationTypes.length > 0 && !educationTypes.includes(item.educationType)) return false;
-    if (searchParams.get("programCode") && !textIncludes(item.code, searchParams.get("programCode") ?? "")) return false;
-    if (hasSuccessRank && minRank > 0 && (!item.latest.successRank || item.latest.successRank < minRank)) return false;
-    if (hasSuccessRank && maxRank > 0 && (!item.latest.successRank || item.latest.successRank > maxRank)) return false;
-    return true;
-  });
+    const filtered = allItems.filter((item) => {
+      if (!item.latest || item.latest.year !== 2025) return false;
+      if (
+        queryTokens.length > 0 &&
+        !queryTokens.every((token) => textIncludes(`${item.universityName} ${item.programName}`, token))
+      ) {
+        return false;
+      }
+      if (scoreTypes.length > 0 && !scoreTypes.includes(item.scoreType)) return false;
+      if (universities.length > 0 && !universities.includes(item.universityName)) return false;
+      if (programNames.length > 0 && !programNames.some((programName) => textIncludes(item.programName, programName))) return false;
+      if (cities.length > 0 && (!item.city || !cities.includes(item.city))) return false;
+      if (universityTypes.length > 0 && !universityTypes.includes(item.universityType)) return false;
+      if (feeTypes.length > 0 && !feeTypes.includes(item.feeType)) return false;
+      if (educationTypes.length > 0 && !educationTypes.includes(item.educationType)) return false;
+      if (searchParams.get("programCode") && !textIncludes(item.code, searchParams.get("programCode") ?? "")) return false;
+      if (hasSuccessRank && minRank > 0 && (!item.latest.successRank || item.latest.successRank < minRank)) return false;
+      if (hasSuccessRank && maxRank > 0 && (!item.latest.successRank || item.latest.successRank > maxRank)) return false;
+      return true;
+    });
 
-  const sorted = sortPrograms(filtered, searchParams.get("sort") ?? "successRank", searchParams.get("dir") ?? "asc");
+    const sorted = sortPrograms(filtered, searchParams.get("sort") ?? "successRank", searchParams.get("dir") ?? "asc");
 
-  const optionSource = codes?.length ? allItems : allItems;
+    const optionSource = codes?.length ? allItems : allItems;
 
-  return NextResponse.json({
-    items: sorted.slice(0, Number.isFinite(limit) ? limit : 700),
-    total: sorted.length,
-    options: {
-      scoreType: unique(optionSource.map((item) => item.scoreType)),
-      universityName: unique(optionSource.map((item) => item.universityName)),
-      programName: unique(optionSource.map((item) => item.programName)),
-      city: unique(optionSource.map((item) => item.city)),
-      universityType: unique(optionSource.map((item) => item.universityType)),
-      feeType: unique(optionSource.map((item) => item.feeType)),
-      educationType: unique(optionSource.map((item) => item.educationType)),
-    },
-    meta: {
-      hasSuccessRank,
-    },
-  });
+    return NextResponse.json({
+      items: sorted.slice(0, Number.isFinite(limit) ? limit : 700),
+      total: sorted.length,
+      options: {
+        scoreType: unique(optionSource.map((item) => item.scoreType)),
+        universityName: unique(optionSource.map((item) => item.universityName)),
+        programName: unique(optionSource.map((item) => item.programName)),
+        city: unique(optionSource.map((item) => item.city)),
+        universityType: unique(optionSource.map((item) => item.universityType)),
+        feeType: unique(optionSource.map((item) => item.feeType)),
+        educationType: unique(optionSource.map((item) => item.educationType)),
+      },
+      meta: {
+        hasSuccessRank,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      {
+        error: "Program verisi okunamadı.",
+        detail: error instanceof Error ? error.message : "Bilinmeyen hata",
+      },
+      { status: 500 },
+    );
+  }
 }
