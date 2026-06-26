@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8faf9;
+  --foreground: #18201d;
+  --color-primary: #7a7a34;
+  --color-primary-hover: color-mix(in srgb, var(--color-primary) 84%, black);
+  --color-primary-border: color-mix(in srgb, var(--color-primary) 82%, black);
+  --color-primary-text: color-mix(in srgb, var(--color-primary) 58%, black);
+  --color-primary-strong: color-mix(in srgb, var(--color-primary) 72%, black);
+  --color-primary-soft: color-mix(in srgb, var(--color-primary) 8%, white);
+  --color-primary-soft-hover: color-mix(in srgb, var(--color-primary) 13%, white);
+  --color-primary-tag: color-mix(in srgb, var(--color-primary) 6%, white);
+  --color-primary-tag-border: color-mix(in srgb, var(--color-primary) 20%, white);
+}
+
+html {
+  --color-primary: #7a7a34;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+.brand-title {
+  font-family: Montserrat, Arial, Helvetica, sans-serif;
+  font-weight: 700;
+}

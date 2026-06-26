@@ -1,0 +1,87 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Program {
+  code                   String        @id
+  universityName         String
+  originalUniversityName String
+  facultyName            String
+  programName            String
+  scoreType              String
+  universityType         String
+  city                   String?
+  feeType                String
+  educationType          String
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  years                  ProgramYear[]
+
+  @@index([universityName])
+  @@index([programName])
+  @@index([scoreType])
+  @@index([city])
+}
+
+model ProgramYear {
+  id          String   @id @default(cuid())
+  programCode String
+  year        Int
+  quota       Int?
+  placed      Int?
+  lowestScore Float?
+  highestScore Float?
+  successRank Int?
+  sourceFile  String
+  rawRow      Int
+  program     Program  @relation(fields: [programCode], references: [code], onDelete: Cascade)
+
+  @@unique([programCode, year])
+  @@index([year])
+  @@index([successRank])
+}
+
+model ImportRun {
+  id             String        @id @default(cuid())
+  fileName       String
+  detectedYear   Int
+  importedRows   Int
+  skippedRows    Int
+  missingFields  Int
+  suspiciousRows Int
+  createdAt      DateTime      @default(now())
+  issues         ImportIssue[]
+}
+
+model ImportIssue {
+  id        String    @id @default(cuid())
+  runId     String
+  rowNumber Int?
+  severity  String
+  field     String?
+  message   String
+  run       ImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([severity])
+}
+
+model UserState {
+  id                   String   @id
+  preferenceStoreJson  String   @default("")
+  favoritesJson        String   @default("[]")
+  disabledProgramsJson String   @default("[]")
+  savedFiltersJson     String   @default("[]")
+  explorerStateJson    String   @default("{}")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
