@@ -627,13 +627,13 @@ export default function ProgramExplorer() {
           borderColor: "var(--color-primary-border)",
         }}
       >
-        <div className="mx-auto flex max-w-[1680px] flex-col justify-end gap-4 px-4 pt-14 pb-5 md:px-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mx-auto grid max-w-[1680px] gap-4 px-4 pt-14 pb-5 md:px-6 lg:grid-cols-[minmax(0,290px)_minmax(0,1fr)] lg:items-end xl:grid-cols-[minmax(0,290px)_minmax(760px,1fr)_minmax(0,230px)]">
           <img
             src="/logo.png"
             alt="Üniversite Tercih Atlası"
             className="h-auto w-[190px] max-w-full md:w-[220px]"
           />
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 lg:col-start-2">
             <input
               ref={restoreInputRef}
               type="file"
@@ -1123,10 +1123,10 @@ export default function ProgramExplorer() {
             {orderedPreferencePrograms.length > 0 ? (
               <ol className="grid gap-1">
                 {orderedPreferencePrograms.map((program, index) => (
-                  <li key={program.code} className="flex min-w-0 items-baseline gap-1.5">
-                    <span className="w-4 shrink-0 text-right text-[#9aa7a1] tabular-nums">{index + 1}</span>
-                    <span className="max-w-[46%] shrink truncate">{program.universityName}</span>
-                    <strong className="min-w-0 flex-1 truncate font-semibold text-[#18201d]">{program.programName}</strong>
+                  <li key={program.code} className="min-w-0 truncate">
+                    <span className="mr-1 text-[#9aa7a1] tabular-nums">{index + 1}.</span>
+                    <span>{program.universityName}</span>{" "}
+                    <strong className="font-semibold text-[#18201d]">{program.programName}</strong>
                   </li>
                 ))}
               </ol>
