@@ -240,6 +240,7 @@ export default function ProgramExplorer() {
   const [userRank, setUserRank] = useState("");
   const [detailCode, setDetailCode] = useState<string | null>(null);
   const [activeList, setActiveList] = useState<PreferenceListRecord | null>(null);
+  const [preferencePrograms, setPreferencePrograms] = useState<ProgramDto[]>([]);
   const [hydratedFromUrl, setHydratedFromUrl] = useState(false);
   const [filterSearches, setFilterSearches] = useState<Partial<Record<MultiFilterKey, string>>>({});
   const [openFilterKey, setOpenFilterKey] = useState<MultiFilterKey | null>(null);
@@ -381,10 +382,47 @@ export default function ProgramExplorer() {
     if (!onlyFavorites) return data.items;
     return data.items.filter((item) => favorites.includes(item.code));
   }, [data.items, favorites, onlyFavorites]);
+  const activePreferenceItems = useMemo(() => activeList?.items ?? [], [activeList]);
   const activePreferenceCodes = useMemo(
-    () => new Set(activeList?.items.map((item) => item.code) ?? []),
-    [activeList],
+    () => new Set(activePreferenceItems.map((item) => item.code)),
+    [activePreferenceItems],
   );
+  const activePreferenceCodesKey = useMemo(
+    () => activePreferenceItems.map((item) => item.code).join(","),
+    [activePreferenceItems],
+  );
+  const preferenceProgramByCode = useMemo(
+    () => new Map(preferencePrograms.map((program) => [program.code, program])),
+    [preferencePrograms],
+  );
+  const orderedPreferencePrograms = useMemo(
+    () => activePreferenceItems.map((entry) => preferenceProgramByCode.get(entry.code)).filter(Boolean) as ProgramDto[],
+    [activePreferenceItems, preferenceProgramByCode],
+  );
+
+  useEffect(() => {
+    if (!hydratedFromUrl || activePreferenceItems.length === 0) {
+      setPreferencePrograms([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      codes: activePreferenceCodesKey,
+      limit: "1000",
+    });
+
+    fetch(`/api/programs?${params.toString()}`, { signal: controller.signal })
+      .then((response) => readApiResponse<ApiResponse>(response))
+      .then((payload) => setPreferencePrograms(payload.items))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.error(error);
+        setPreferencePrograms([]);
+      });
+
+    return () => controller.abort();
+  }, [activePreferenceCodesKey, activePreferenceItems.length, hydratedFromUrl]);
 
   function updateFilter(key: SingleFilterKey, value: string) {
     setFilters((current) => {
@@ -655,7 +693,7 @@ export default function ProgramExplorer() {
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-[1680px] gap-4 px-4 py-5 md:px-6 lg:grid-cols-[minmax(0,290px)_minmax(0,1fr)]">
+      <div className="mx-auto grid max-w-[1680px] gap-4 px-4 py-5 md:px-6 lg:grid-cols-[minmax(0,290px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,290px)_minmax(760px,1fr)_minmax(0,230px)]">
         <aside className="h-fit min-w-0 overflow-hidden rounded-md border border-[#d9e2de] bg-white p-4 lg:sticky lg:top-5 lg:max-h-[calc(100vh-40px)] lg:overflow-y-auto">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold">
@@ -1079,6 +1117,22 @@ export default function ProgramExplorer() {
             </div>
           )}
         </section>
+
+        <aside className="min-w-0 text-[10px] leading-4 text-[#66766f] lg:col-start-2 xl:col-start-auto">
+          <div className="h-fit lg:sticky lg:top-[150px]">
+            {orderedPreferencePrograms.length > 0 ? (
+              <ol className="grid gap-1">
+                {orderedPreferencePrograms.map((program, index) => (
+                  <li key={program.code} className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="w-4 shrink-0 text-right text-[#9aa7a1] tabular-nums">{index + 1}</span>
+                    <span className="max-w-[46%] shrink truncate">{program.universityName}</span>
+                    <strong className="min-w-0 flex-1 truncate font-semibold text-[#18201d]">{program.programName}</strong>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+        </aside>
       </div>
       <ProgramDetailOverlay code={detailCode} onClose={() => setDetailCode(null)} />
       <PreferenceListOverlay
