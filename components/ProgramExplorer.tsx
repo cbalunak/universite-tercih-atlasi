@@ -26,12 +26,12 @@ import ProgramDetailOverlay from "@/components/ProgramDetailOverlay";
 import PreferenceListOverlay from "@/components/PreferenceListOverlay";
 import {
   activePreferenceList,
-  addProgramsToActivePreferenceList,
   readPreferenceStore,
   removeProgramFromActivePreferenceList,
   writePreferenceStore,
   type PreferenceStore,
   type PreferenceListRecord,
+  type PreferenceItem,
 } from "@/lib/preference-storage";
 import { createUserStateBackup, fetchUserState, parseUserStateBackup, persistUserState, userStateKeys } from "@/lib/user-state";
 
@@ -125,6 +125,24 @@ function appendFilterParams(params: URLSearchParams, filters: ProgramFilters) {
 
 function normalizeSearch(value: string) {
   return value.toLocaleLowerCase("tr-TR").trim();
+}
+
+function compactUniversityName(value: string) {
+  return value
+    .replace(/\s+(ÜNİVERSİTESİ|Üniversitesi|üniversitesi)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function compactProgramName(value: string) {
+  return value
+    .replace(/\s+(MÜHENDİSLİĞİ|Mühendisliği|mühendisliği)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function latestRank(program: ProgramDto | undefined) {
+  return program?.latest?.successRank ?? null;
 }
 
 function hasUrlState(params: URLSearchParams) {
@@ -472,9 +490,50 @@ export default function ProgramExplorer() {
   }
 
   function togglePreference(program: ProgramDto) {
-    const nextStore = activePreferenceCodes.has(program.code)
-      ? removeProgramFromActivePreferenceList(program.code)
-      : addProgramsToActivePreferenceList([program.code]);
+    if (activePreferenceCodes.has(program.code)) {
+      const nextStore = removeProgramFromActivePreferenceList(program.code);
+      setActiveList(activePreferenceList(nextStore));
+      return;
+    }
+
+    const store = readPreferenceStore();
+    const active = activePreferenceList(store);
+    if (active.items.some((item) => item.code === program.code)) {
+      setActiveList(active);
+      return;
+    }
+
+    const knownPrograms = new Map([
+      ...preferencePrograms.map((item) => [item.code, item] as const),
+      ...data.items.map((item) => [item.code, item] as const),
+      [program.code, program] as const,
+    ]);
+    const inserted: PreferenceItem = { code: program.code, note: "" };
+    const newRank = latestRank(program);
+    let insertIndex = active.items.length;
+
+    if (newRank !== null) {
+      const firstWorseIndex = active.items.findIndex((item) => {
+        const currentProgram = knownPrograms.get(item.code);
+        if (!currentProgram) return false;
+
+        const currentRank = latestRank(currentProgram);
+        return currentRank === null || currentRank > newRank;
+      });
+      if (firstWorseIndex >= 0) insertIndex = firstWorseIndex;
+    }
+
+    const nextItems = [
+      ...active.items.slice(0, insertIndex),
+      inserted,
+      ...active.items.slice(insertIndex),
+    ];
+    const nextStore = {
+      activeListId: store.activeListId,
+      lists: store.lists.map((list) => (list.id === active.id ? { ...list, items: nextItems } : list)),
+    };
+
+    writePreferenceStore(nextStore);
     setActiveList(activePreferenceList(nextStore));
   }
 
@@ -1125,8 +1184,8 @@ export default function ProgramExplorer() {
                 {orderedPreferencePrograms.map((program, index) => (
                   <li key={program.code} className="min-w-0 truncate">
                     <span className="mr-1 text-[#9aa7a1] tabular-nums">{index + 1}.</span>
-                    <span>{program.universityName}</span>{" "}
-                    <strong className="font-semibold text-[#18201d]">{program.programName}</strong>
+                    <span>{compactUniversityName(program.universityName)}</span>{" "}
+                    <strong className="font-semibold text-[#18201d]">{compactProgramName(program.programName)}</strong>
                   </li>
                 ))}
               </ol>
