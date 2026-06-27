@@ -6,7 +6,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from 
 import type { DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, FileDown, GripVertical, Home, Pencil, Plus, Share2, Trash2, Upload, X } from "lucide-react";
+import { ArrowDownUp, Check, FileDown, GripVertical, Home, Pencil, Plus, Share2, Trash2, Upload, X } from "lucide-react";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
@@ -27,6 +27,21 @@ type PreferenceListProps = {
   mode?: "page" | "overlay";
   onChange?: () => void;
 };
+
+type PreferenceSortKey = "universityName" | "programName" | "successRank2025" | "successRank2024" | "successRank2023" | "lowestScore" | "quota";
+type PreferenceSortDir = "asc" | "desc";
+
+const preferenceSortableHeaders: Array<{ key: PreferenceSortKey; label: string; align?: "left" | "center"; initialDir: PreferenceSortDir }> = [
+  { key: "universityName", label: "Üniversite", initialDir: "asc" },
+  { key: "programName", label: "Program", initialDir: "asc" },
+  { key: "successRank2025", label: "2025", align: "center", initialDir: "asc" },
+  { key: "successRank2024", label: "2024", align: "center", initialDir: "asc" },
+  { key: "successRank2023", label: "2023", align: "center", initialDir: "asc" },
+  { key: "lowestScore", label: "T. Puan", align: "center", initialDir: "desc" },
+  { key: "quota", label: "Kont.", align: "center", initialDir: "desc" },
+];
+
+const collator = new Intl.Collator("tr-TR", { sensitivity: "base", numeric: true });
 
 async function addPdfFont(pdf: jsPDF) {
   const fontName = "Geist";
@@ -73,6 +88,36 @@ function exportRows(programs: ProgramDto[], list: PreferenceItem[]) {
       return row;
     })
     .filter((row): row is Record<string, string | number> => row !== null);
+}
+
+function yearValue(program: ProgramDto, year: number, field: "successRank" | "lowestScore" | "quota") {
+  return program.years.find((item) => item.year === year)?.[field] ?? null;
+}
+
+function sortableValue(program: ProgramDto, key: PreferenceSortKey) {
+  if (key === "universityName") return program.universityName;
+  if (key === "programName") return program.programName;
+  if (key === "successRank2025") return yearValue(program, 2025, "successRank");
+  if (key === "successRank2024") return yearValue(program, 2024, "successRank");
+  if (key === "successRank2023") return yearValue(program, 2023, "successRank");
+  if (key === "lowestScore") return yearValue(program, 2025, "lowestScore");
+  return yearValue(program, 2025, "quota");
+}
+
+function comparePrograms(a: ProgramDto, b: ProgramDto, key: PreferenceSortKey, dir: PreferenceSortDir) {
+  const aValue = sortableValue(a, key);
+  const bValue = sortableValue(b, key);
+
+  if (aValue === null && bValue === null) return 0;
+  if (aValue === null) return 1;
+  if (bValue === null) return -1;
+
+  const result =
+    typeof aValue === "string" && typeof bValue === "string"
+      ? collator.compare(aValue, bValue)
+      : Number(aValue) - Number(bValue);
+
+  return dir === "asc" ? result : -result;
 }
 
 function SortableProgramRow({
@@ -142,6 +187,7 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
   const [programs, setPrograms] = useState<ProgramDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [preferenceSort, setPreferenceSort] = useState<{ key: PreferenceSortKey; dir: PreferenceSortDir } | null>(null);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -191,9 +237,11 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
       .finally(() => setLoading(false));
   }, [list]);
 
+  const programByCode = useMemo(() => new Map(programs.map((program) => [program.code, program])), [programs]);
+
   const orderedPrograms = useMemo(
-    () => list.map((entry) => programs.find((program) => program.code === entry.code)).filter(Boolean) as ProgramDto[],
-    [list, programs],
+    () => list.map((entry) => programByCode.get(entry.code)).filter(Boolean) as ProgramDto[],
+    [list, programByCode],
   );
 
   function updateList(next: PreferenceItem[]) {
@@ -202,6 +250,30 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
     setLists(nextLists);
     writePreferenceStore({ activeListId: activeList.id, lists: nextLists });
     onChange?.();
+  }
+
+  function sortPreferenceList(key: PreferenceSortKey, label: string, initialDir: PreferenceSortDir) {
+    if (list.length <= 1) return;
+
+    const dir = preferenceSort?.key === key ? (preferenceSort.dir === "asc" ? "desc" : "asc") : initialDir;
+    const directionLabel = dir === "asc" ? "artan" : "azalan";
+    const confirmed = window.confirm(`Tercih listeniz "${label}" kolonuna göre ${directionLabel} sıralanacak. Emin misiniz?`);
+    if (!confirmed) return;
+
+    const sorted = list
+      .map((entry, index) => ({ entry, index, program: programByCode.get(entry.code) }))
+      .sort((a, b) => {
+        if (!a.program && !b.program) return a.index - b.index;
+        if (!a.program) return 1;
+        if (!b.program) return -1;
+
+        const result = comparePrograms(a.program, b.program, key, dir);
+        return result === 0 ? a.index - b.index : result;
+      })
+      .map((item) => item.entry);
+
+    setPreferenceSort({ key, dir });
+    updateList(sorted);
   }
 
   function changeActiveList(id: string) {
@@ -666,13 +738,36 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
                       <tr>
                         <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">Taşı</th>
                         <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">Sıra</th>
-                        <th className="px-2 py-2 font-semibold whitespace-nowrap">Üniversite</th>
-                        <th className="px-2 py-2 font-semibold whitespace-nowrap">Program</th>
-                        <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">2025</th>
-                        <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">2024</th>
-                        <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">2023</th>
-                        <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">T. Puan</th>
-                        <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">Kont.</th>
+                        {preferenceSortableHeaders.map((header) => {
+                          const isActiveSort = preferenceSort?.key === header.key;
+                          return (
+                            <th
+                              key={header.key}
+                              className={[
+                                "px-2 py-2 font-semibold whitespace-nowrap",
+                                header.align === "center" ? "text-center" : "",
+                              ].join(" ")}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => sortPreferenceList(header.key, header.label, header.initialDir)}
+                                className={[
+                                  "focus-ring inline-flex max-w-full items-center gap-1 rounded-sm hover:text-[var(--color-primary-text)]",
+                                  header.align === "center" ? "justify-center" : "text-left",
+                                  isActiveSort ? "text-[var(--color-primary-text)]" : "",
+                                ].join(" ")}
+                              >
+                                <span className="min-w-0">{header.label}</span>
+                                <ArrowDownUp
+                                  className={[
+                                    "h-3.5 w-3.5 shrink-0",
+                                    isActiveSort && preferenceSort.dir === "desc" ? "rotate-180" : "",
+                                  ].join(" ")}
+                                />
+                              </button>
+                            </th>
+                          );
+                        })}
                         <th className="px-1.5 py-2 text-center font-semibold whitespace-nowrap">Sil</th>
                       </tr>
                     </thead>
