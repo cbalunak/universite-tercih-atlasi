@@ -31,6 +31,10 @@ export default function ProgramDetailOverlay({ code, onClose }: Props) {
         return response.json();
       })
       .then((payload: ProgramDto) => setProgram(payload))
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        console.error(error);
+      })
       .finally(() => setLoading(false));
 
     return () => controller.abort();
@@ -56,13 +60,13 @@ export default function ProgramDetailOverlay({ code, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#18201d]/45 p-3 backdrop-blur-sm md:p-6"
+      className="fixed inset-0 z-50 grid place-items-start bg-[#18201d]/45 p-2 backdrop-blur-sm md:p-4"
       role="dialog"
       aria-modal="true"
       onMouseDown={onClose}
     >
       <div
-        className="mx-auto flex h-full max-w-7xl flex-col overflow-hidden rounded-md border border-[#d9e2de] bg-[#f8faf9] shadow-2xl"
+        className="mx-auto flex max-h-[calc(100vh-1rem)] w-full max-w-[1500px] flex-col overflow-hidden rounded-md border border-[#d9e2de] bg-[#f8faf9] shadow-2xl md:max-h-[calc(100vh-2rem)]"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[#d9e2de] bg-white px-4 py-3">
@@ -88,7 +92,7 @@ export default function ProgramDetailOverlay({ code, onClose }: Props) {
             </button>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
+        <div className="min-h-0 overflow-y-auto p-4 md:p-5">
           {loading ? (
             <div className="grid min-h-[360px] place-items-center text-[#52645d]">
               <div className="flex items-center gap-2">

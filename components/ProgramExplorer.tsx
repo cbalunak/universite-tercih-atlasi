@@ -995,15 +995,15 @@ export default function ProgramExplorer() {
               <div className="scrollbar-hidden max-h-[calc(100vh-160px)] overflow-auto">
                 <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-xs">
                   <colgroup>
-                    <col className="w-[24%]" />
+                    <col className="w-[23%]" />
                     <col className="w-[28%]" />
+                    <col className="w-[8%]" />
                     <col className="w-[6%]" />
                     <col className="w-[6%]" />
                     <col className="w-[6%]" />
                     <col className="w-[6%]" />
-                    <col className="w-[6%]" />
-                    <col className="w-[6%]" />
-                    <col className="w-[6%]" />
+                    <col className="w-[5.5%]" />
+                    <col className="w-[5.5%]" />
                     <col className="w-[6%]" />
                   </colgroup>
                   <thead className="sticky top-0 z-20 bg-[var(--color-primary)] text-xs uppercase tracking-[0.06em] text-white">

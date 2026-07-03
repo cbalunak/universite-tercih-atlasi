@@ -7,6 +7,11 @@ export type ProgramYearDto = {
   successRank: number | null;
 };
 
+export type ProgramSpecialConditionDto = {
+  code: string;
+  description: string;
+};
+
 export type ProgramDto = {
   code: string;
   universityName: string;
@@ -20,6 +25,9 @@ export type ProgramDto = {
   educationType: string;
   latest: ProgramYearDto | null;
   years: ProgramYearDto[];
+  specialConditions?: ProgramSpecialConditionDto[];
+  minSuccessRankCondition?: number | null;
+  accreditation?: string | null;
 };
 
 export type ProgramFilters = {
