@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { programToDto } from "@/lib/program-dto";
+import { estimateSuccessRank } from "@/lib/rank-estimate";
 import type { ProgramDto } from "@/types/program";
 import type { Program, ProgramYear } from "@/generated/prisma/client";
 
@@ -35,6 +36,9 @@ function sortPrograms(items: ProgramDto[], sortKey: string, direction: string) {
   const multiplier = direction === "desc" ? -1 : 1;
   const pick = (item: ProgramDto): string | number => {
     if (sortKey === "lowestScore") return item.latest?.lowestScore ?? -1;
+    if (sortKey === "estimatedRank2026") {
+      return estimateSuccessRank(item) ?? (direction === "desc" ? -1 : Number.MAX_SAFE_INTEGER);
+    }
     if (sortKey === "successRank") return item.latest?.successRank ?? Number.MAX_SAFE_INTEGER;
     if (sortKey === "successRank2024") return item.years.find((year) => year.year === 2024)?.successRank ?? Number.MAX_SAFE_INTEGER;
     if (sortKey === "successRank2023") return item.years.find((year) => year.year === 2023)?.successRank ?? Number.MAX_SAFE_INTEGER;

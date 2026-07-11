@@ -212,6 +212,17 @@ export default function ProgramDetail({ program }: Props) {
               <div className="text-sm text-[#66766f]">Bu program için özel şart bulunmuyor.</div>
             )
           ) : null}
+          {program.academicStaffUrl ? (
+            <a
+              href={program.academicStaffUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="focus-ring mt-3 inline-flex items-center gap-1.5 rounded-md border border-[#ccd8d2] bg-white px-2.5 py-1.5 text-xs font-semibold text-[var(--color-primary)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
+            >
+              Akademik Kadro
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ) : null}
         </section>
       </div>
 

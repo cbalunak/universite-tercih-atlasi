@@ -6,11 +6,12 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from 
 import type { DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDownUp, Check, FileDown, GripVertical, Home, Pencil, Plus, Share2, Trash2, Upload, X } from "lucide-react";
+import { Check, FileDown, GripVertical, Home, Pencil, Plus, Share2, Trash2, Upload, X } from "lucide-react";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { formatNumber, formatScore } from "@/lib/format";
+import { estimateSuccessRank } from "@/lib/rank-estimate";
 import { atlasYears } from "@/lib/year-config";
 import type { ProgramDto } from "@/types/program";
 import {
@@ -28,7 +29,7 @@ type PreferenceListProps = {
   onChange?: () => void;
 };
 
-type PreferenceSortKey = "universityName" | "programName" | "successRank2025" | "successRank2024" | "successRank2023" | "lowestScore" | "quota";
+type PreferenceSortKey = "universityName" | "programName" | "successRank2025" | "successRank2024" | "successRank2023" | "estimatedRank2026" | "quota";
 type PreferenceSortDir = "asc" | "desc";
 
 const preferenceSortableHeaders: Array<{ key: PreferenceSortKey; label: string; align?: "left" | "center"; initialDir: PreferenceSortDir }> = [
@@ -37,11 +38,15 @@ const preferenceSortableHeaders: Array<{ key: PreferenceSortKey; label: string; 
   { key: "successRank2025", label: "2025", align: "center", initialDir: "asc" },
   { key: "successRank2024", label: "2024", align: "center", initialDir: "asc" },
   { key: "successRank2023", label: "2023", align: "center", initialDir: "asc" },
-  { key: "lowestScore", label: "T. Puan", align: "center", initialDir: "desc" },
+  { key: "estimatedRank2026", label: "26 Tah.", align: "center", initialDir: "asc" },
   { key: "quota", label: "Kont.", align: "center", initialDir: "desc" },
 ];
 
 const collator = new Intl.Collator("tr-TR", { sensitivity: "base", numeric: true });
+
+function createPreferenceListId() {
+  return `liste-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 async function addPdfFont(pdf: jsPDF) {
   const fontName = "Geist";
@@ -100,7 +105,7 @@ function sortableValue(program: ProgramDto, key: PreferenceSortKey) {
   if (key === "successRank2025") return yearValue(program, 2025, "successRank");
   if (key === "successRank2024") return yearValue(program, 2024, "successRank");
   if (key === "successRank2023") return yearValue(program, 2023, "successRank");
-  if (key === "lowestScore") return yearValue(program, 2025, "lowestScore");
+  if (key === "estimatedRank2026") return estimateSuccessRank(program);
   return yearValue(program, 2025, "quota");
 }
 
@@ -162,7 +167,9 @@ function SortableProgramRow({
       <td className="px-2 py-0.5 text-center leading-3 whitespace-nowrap tabular-nums">
         {formatNumber(program.years.find((item) => item.year === 2023)?.successRank)}
       </td>
-      <td className="px-2 py-0.5 text-center leading-3 whitespace-nowrap tabular-nums">{formatScore(program.latest?.lowestScore)}</td>
+      <td className="px-2 py-0.5 text-center font-semibold leading-3 whitespace-nowrap text-[#dc2626] tabular-nums">
+        {formatNumber(estimateSuccessRank(program))}
+      </td>
       <td className="px-2 py-0.5 text-center leading-3 whitespace-nowrap tabular-nums">{formatNumber(program.latest?.quota)}</td>
       <td className="px-1.5 py-0.5 text-center leading-none whitespace-nowrap">
         <button
@@ -182,6 +189,8 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
   const [lists, setLists] = useState<PreferenceListRecord[]>([]);
   const [activeListId, setActiveListId] = useState("");
   const [newListName, setNewListName] = useState("");
+  const [mergePickerOpen, setMergePickerOpen] = useState(false);
+  const [mergeSelectedListIds, setMergeSelectedListIds] = useState<string[]>([]);
   const [editingListId, setEditingListId] = useState("");
   const [editingListName, setEditingListName] = useState("");
   const [programs, setPrograms] = useState<ProgramDto[]>([]);
@@ -243,6 +252,18 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
     () => list.map((entry) => programByCode.get(entry.code)).filter(Boolean) as ProgramDto[],
     [list, programByCode],
   );
+  const totalPreferenceItems = useMemo(
+    () => lists.reduce((total, item) => total + item.items.length, 0),
+    [lists],
+  );
+  const selectedMergeLists = useMemo(
+    () => lists.filter((item) => mergeSelectedListIds.includes(item.id)),
+    [lists, mergeSelectedListIds],
+  );
+  const selectedMergeItemCount = useMemo(
+    () => selectedMergeLists.reduce((total, item) => total + item.items.length, 0),
+    [selectedMergeLists],
+  );
 
   function updateList(next: PreferenceItem[]) {
     if (!activeList) return;
@@ -288,6 +309,62 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
     setLists(store.lists);
     setActiveListId(store.activeListId);
     setNewListName("");
+    onChange?.();
+  }
+
+  function openMergePicker() {
+    if (totalPreferenceItems === 0) {
+      window.alert("Birleştirilecek tercih bulunmuyor.");
+      return;
+    }
+
+    setMergeSelectedListIds(lists.filter((item) => item.items.length > 0).map((item) => item.id));
+    setMergePickerOpen(true);
+  }
+
+  function toggleMergeSelection(listId: string) {
+    setMergeSelectedListIds((current) =>
+      current.includes(listId) ? current.filter((item) => item !== listId) : [...current, listId],
+    );
+  }
+
+  function mergeListsIntoNewList() {
+    if (selectedMergeItemCount === 0) {
+      window.alert("Birleştirmek için en az bir dolu liste seçin.");
+      return;
+    }
+
+    const knownCodes = new Set<string>();
+    const mergedItems: PreferenceItem[] = [];
+    selectedMergeLists.forEach((preferenceList) => {
+      preferenceList.items.forEach((item) => {
+        if (knownCodes.has(item.code)) return;
+        knownCodes.add(item.code);
+        mergedItems.push({ ...item });
+      });
+    });
+
+    const id = createPreferenceListId();
+    const dateLabel = new Intl.DateTimeFormat("tr-TR", {
+      day: "2-digit",
+      month: "2-digit",
+    })
+      .format(new Date())
+      .replaceAll(".", "-");
+    const nextList: PreferenceListRecord = {
+      id,
+      name: `Birleşik Liste ${dateLabel}`,
+      items: mergedItems,
+      createdAt: new Date().toISOString(),
+    };
+    const nextLists = [...lists, nextList];
+
+    setLists(nextLists);
+    setActiveListId(id);
+    setPreferenceSort(null);
+    setMergePickerOpen(false);
+    setMergeSelectedListIds([]);
+    writePreferenceStore({ activeListId: id, lists: nextLists });
     onChange?.();
   }
 
@@ -707,8 +784,71 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
                   <Plus className="h-4 w-4" />
                   Liste Oluştur
                 </button>
+                <button
+                  type="button"
+                  onClick={openMergePicker}
+                  disabled={totalPreferenceItems === 0}
+                  className="focus-ring inline-flex items-center gap-2 rounded-md border border-[#ccd8d2] bg-white px-3 py-2 text-sm font-semibold text-[#36443f] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Tüm listeleri sırayla birleştirir ve tekrar eden programları tek kez ekler"
+                >
+                  <Plus className="h-4 w-4" />
+                  Listeleri Birleştir
+                </button>
               </div>
             </div>
+            {mergePickerOpen ? (
+              <div className="rounded-md border border-[#d9e2de] bg-[#f8faf9] p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-[#36443f]">Birleştirilecek listeler</div>
+                  <div className="text-xs text-[#66766f]">{selectedMergeItemCount} tercih seçildi</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {lists.map((item) => {
+                    const checked = mergeSelectedListIds.includes(item.id);
+                    return (
+                      <label
+                        key={item.id}
+                        className={[
+                          "inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium",
+                          checked
+                            ? "border-[var(--color-primary)] bg-[var(--color-primary-soft)] text-[var(--color-primary-strong)]"
+                            : "border-[#ccd8d2] bg-white text-[#36443f]",
+                        ].join(" ")}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 accent-[var(--color-primary)]"
+                          checked={checked}
+                          onChange={() => toggleMergeSelection(item.id)}
+                        />
+                        <span>{item.name}</span>
+                        <span className="text-[#66766f]">({item.items.length})</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMergePickerOpen(false);
+                      setMergeSelectedListIds([]);
+                    }}
+                    className="focus-ring rounded-md border border-[#ccd8d2] bg-white px-3 py-1.5 text-xs font-medium text-[#36443f] hover:border-[var(--color-primary)]"
+                  >
+                    Vazgeç
+                  </button>
+                  <button
+                    type="button"
+                    onClick={mergeListsIntoNewList}
+                    disabled={selectedMergeItemCount === 0}
+                    className="focus-ring rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Seçilenleri Birleştir
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -745,6 +885,7 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
                               key={header.key}
                               className={[
                                 "px-2 py-2 font-semibold whitespace-nowrap",
+                                header.key === "estimatedRank2026" ? "text-[#dc2626]" : "",
                                 header.align === "center" ? "text-center" : "",
                               ].join(" ")}
                             >
@@ -758,12 +899,6 @@ export default function PreferenceList({ mode = "page", onChange }: PreferenceLi
                                 ].join(" ")}
                               >
                                 <span className="min-w-0">{header.label}</span>
-                                <ArrowDownUp
-                                  className={[
-                                    "h-3.5 w-3.5 shrink-0",
-                                    isActiveSort && preferenceSort.dir === "desc" ? "rotate-180" : "",
-                                  ].join(" ")}
-                                />
                               </button>
                             </th>
                           );

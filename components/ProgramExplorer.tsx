@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
-  ArrowDownUp,
   ArrowDown,
   ArrowUp,
   Ban,
@@ -20,7 +19,8 @@ import {
 } from "lucide-react";
 import { saveAs } from "file-saver";
 import { filterConfig } from "@/lib/filter-config";
-import { formatNumber, formatScore, riskLabel } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
+import { estimateSuccessRank } from "@/lib/rank-estimate";
 import type { ProgramDto, ProgramFilters } from "@/types/program";
 import ProgramDetailOverlay from "@/components/ProgramDetailOverlay";
 import PreferenceListOverlay from "@/components/PreferenceListOverlay";
@@ -417,6 +417,17 @@ export default function ProgramExplorer() {
     () => activePreferenceItems.map((entry) => preferenceProgramByCode.get(entry.code)).filter(Boolean) as ProgramDto[],
     [activePreferenceItems, preferenceProgramByCode],
   );
+  const preferenceRankLineIndex = useMemo(() => {
+    const rank = Number(userRank || "0") || null;
+    if (!rank || orderedPreferencePrograms.length === 0) return null;
+
+    const firstWorseIndex = orderedPreferencePrograms.findIndex((program) => {
+      const currentRank = latestRank(program);
+      return currentRank === null || currentRank > rank;
+    });
+
+    return firstWorseIndex >= 0 ? firstWorseIndex : orderedPreferencePrograms.length;
+  }, [orderedPreferencePrograms, userRank]);
 
   useEffect(() => {
     if (!hydratedFromUrl || activePreferenceItems.length === 0) {
@@ -674,7 +685,6 @@ export default function ProgramExplorer() {
     }
   }
 
-  const enteredRank = Number(userRank || "0") || null;
   const hasSuccessRank = data.meta?.hasSuccessRank ?? false;
 
   return (
@@ -739,6 +749,21 @@ export default function ProgramExplorer() {
             >
               <Upload className="h-3 w-3" />
               Geri Yükle
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyFavorites((current) => !current)}
+              className={[
+                "focus-ring inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-semibold",
+                onlyFavorites
+                  ? "border-white bg-white text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
+                  : "border-white/55 bg-transparent text-white hover:bg-white/10",
+              ].join(" ")}
+              aria-pressed={onlyFavorites}
+              title="Sadece favori programları göster"
+            >
+              <Star className="h-3 w-3" fill={onlyFavorites ? "currentColor" : "none"} />
+              Favoriler ({favorites.length})
             </button>
             <button
               type="button"
@@ -1014,17 +1039,16 @@ export default function ProgramExplorer() {
                         ["successRank", "2025"],
                         ["successRank2024", "2024"],
                         ["successRank2023", "2023"],
-                        ["lowestScore", "T. Puan"],
+                        ["estimatedRank2026", "26 Tah."],
                         ["quota", "Kont."],
                       ].map(([key, label]) => (
-                        <th key={key} className="px-2 py-2.5 font-semibold">
+                        <th key={key} className={`px-2 py-2.5 font-semibold ${key === "estimatedRank2026" ? "text-[#fecaca]" : ""}`}>
                           <button
                             type="button"
                             onClick={() => changeSort(key)}
                             className="focus-ring inline-flex max-w-full items-center gap-1 rounded-sm text-left whitespace-nowrap hover:text-white/80"
                           >
                             <span className="min-w-0">{label}</span>
-                            <ArrowDownUp className="h-3.5 w-3.5 shrink-0" />
                           </button>
                         </th>
                       ))}
@@ -1035,16 +1059,13 @@ export default function ProgramExplorer() {
                   </thead>
                   <tbody>
                     {visibleItems.map((program) => {
-                      const risk = riskLabel(
-                        enteredRank,
-                        program.years.map((year) => year.successRank),
-                      );
                       const rank2024 = program.years.find((year) => year.year === 2024)?.successRank ?? null;
                       const rank2023 = program.years.find((year) => year.year === 2023)?.successRank ?? null;
                       const isInPreferenceList = activePreferenceCodes.has(program.code);
                       const isFavorite = favorites.includes(program.code);
                       const isDisabled = disabledPrograms.includes(program.code);
                       const rank2025 = program.latest?.successRank ?? null;
+                      const estimatedRank2026 = estimateSuccessRank(program);
                       const rankDirection2025 =
                         rank2025 && rank2024 ? (rank2025 < rank2024 ? "up" : rank2025 > rank2024 ? "down" : null) : null;
                       const rankDirection2024 =
@@ -1089,7 +1110,6 @@ export default function ProgramExplorer() {
                             >
                               {program.programName}
                             </div>
-                            {risk ? <div className="text-[11px] font-normal leading-3 text-[#66766f]">{risk}</div> : null}
                           </td>
                           <td className="px-2 py-1 text-center leading-4 whitespace-nowrap tabular-nums">
                             <span className="inline-grid grid-cols-[auto_16px_16px] items-center justify-center gap-1">
@@ -1116,7 +1136,9 @@ export default function ProgramExplorer() {
                           </td>
                           <td className="px-2 py-1 text-center leading-4 whitespace-nowrap tabular-nums">{rank2024 ? formatNumber(rank2024) : "-"}</td>
                           <td className="px-2 py-1 text-center leading-4 whitespace-nowrap tabular-nums">{rank2023 ? formatNumber(rank2023) : "-"}</td>
-                          <td className="px-2 py-1 text-center leading-4 whitespace-nowrap tabular-nums">{formatScore(program.latest?.lowestScore)}</td>
+                          <td className="px-2 py-1 text-center font-semibold leading-4 whitespace-nowrap text-[#dc2626] tabular-nums">
+                            {estimatedRank2026 ? formatNumber(estimatedRank2026) : "-"}
+                          </td>
                           <td className="px-2 py-1 text-center leading-4 whitespace-nowrap tabular-nums">{formatNumber(program.latest?.quota)}</td>
                           <td className="px-1.5 py-1 text-center whitespace-nowrap">
                             <button
@@ -1182,12 +1204,20 @@ export default function ProgramExplorer() {
             {orderedPreferencePrograms.length > 0 ? (
               <ol className="grid gap-1">
                 {orderedPreferencePrograms.map((program, index) => (
-                  <li key={program.code} className="min-w-0 truncate">
-                    <span className="mr-1 text-[#9aa7a1] tabular-nums">{index + 1}.</span>
-                    <span>{compactUniversityName(program.universityName)}</span>{" "}
-                    <strong className="font-semibold text-[#18201d]">{compactProgramName(program.programName)}</strong>
-                  </li>
+                  <Fragment key={program.code}>
+                    {preferenceRankLineIndex === index ? (
+                      <li className="my-0.5 h-px bg-[#dc2626]" aria-label="Benim başarı sıram" />
+                    ) : null}
+                    <li className="min-w-0 truncate">
+                      <span className="mr-1 text-[#9aa7a1] tabular-nums">{index + 1}.</span>
+                      <span>{compactUniversityName(program.universityName)}</span>{" "}
+                      <strong className="font-semibold text-[#18201d]">{compactProgramName(program.programName)}</strong>
+                    </li>
+                  </Fragment>
                 ))}
+                {preferenceRankLineIndex === orderedPreferencePrograms.length ? (
+                  <li className="my-0.5 h-px bg-[#dc2626]" aria-label="Benim başarı sıram" />
+                ) : null}
               </ol>
             ) : null}
           </div>

@@ -28,6 +28,7 @@ export type ProgramDto = {
   specialConditions?: ProgramSpecialConditionDto[];
   minSuccessRankCondition?: number | null;
   accreditation?: string | null;
+  academicStaffUrl?: string | null;
 };
 
 export type ProgramFilters = {

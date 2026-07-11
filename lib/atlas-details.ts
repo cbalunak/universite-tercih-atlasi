@@ -4,6 +4,7 @@ type AtlasConditionRecord = Record<string, string>;
 
 type AtlasDetailRecord = {
   akreditasyon?: string | null;
+  birimHiyerarsi?: string | null;
   minBasariSirasi?: number | string | null;
   kosulList?: AtlasConditionRecord[] | null;
 };
@@ -16,6 +17,7 @@ export type AtlasProgramDetails = {
   specialConditions: ProgramSpecialConditionDto[];
   minSuccessRankCondition: number | null;
   accreditation: string | null;
+  academicStaffUrl: string | null;
 };
 
 function normalizeConditionText(value: string) {
@@ -43,11 +45,19 @@ function cleanText(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim() || null;
 }
 
+function buildAcademicStaffUrl(value: unknown) {
+  const link = cleanText(value);
+  return link
+    ? `https://yokatlas.yok.gov.tr/api/yokakademik-redirect?akademikLink=${encodeURIComponent(link)}`
+    : null;
+}
+
 function emptyDetails(): AtlasProgramDetails {
   return {
     specialConditions: [],
     minSuccessRankCondition: null,
     accreditation: null,
+    academicStaffUrl: null,
   };
 }
 
@@ -78,6 +88,7 @@ export async function fetchAtlasProgramDetails(code: string): Promise<AtlasProgr
       specialConditions: conditionsFromAtlasRecord(record),
       minSuccessRankCondition: toInt(record?.minBasariSirasi),
       accreditation: cleanText(record?.akreditasyon),
+      academicStaffUrl: buildAcademicStaffUrl(record?.birimHiyerarsi),
     };
   } catch (error) {
     console.error("Atlas detayları alınamadı:", error);
