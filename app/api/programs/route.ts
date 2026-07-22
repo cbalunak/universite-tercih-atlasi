@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { programToDto } from "@/lib/program-dto";
 import { estimateSuccessRank } from "@/lib/rank-estimate";
+import { isNewProgram } from "@/lib/program-status";
 import type { ProgramDto } from "@/types/program";
 import type { Program, ProgramYear } from "@/generated/prisma/client";
 
@@ -32,10 +33,35 @@ function searchTokens(value: string | null) {
     .filter(Boolean);
 }
 
-function sortPrograms(items: ProgramDto[], sortKey: string, direction: string) {
+function safeParseStringArray(value: string | null | undefined) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadDisabledProgramCodes() {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ disabledProgramsJson: string }>>`
+      SELECT disabledProgramsJson
+      FROM UserState
+      WHERE id = 'default'
+      LIMIT 1
+    `;
+    return new Set(safeParseStringArray(rows[0]?.disabledProgramsJson));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function sortPrograms(items: ProgramDto[], sortKey: string, direction: string, disabledProgramCodes: Set<string>) {
   const multiplier = direction === "desc" ? -1 : 1;
   const pick = (item: ProgramDto): string | number => {
     if (sortKey === "lowestScore") return item.latest?.lowestScore ?? -1;
+    if (sortKey === "disabled") return disabledProgramCodes.has(item.code) ? 1 : 0;
     if (sortKey === "estimatedRank2026") {
       return estimateSuccessRank(item) ?? (direction === "desc" ? -1 : Number.MAX_SAFE_INTEGER);
     }
@@ -97,6 +123,8 @@ export async function GET(request: Request) {
     const allItems = await loadPrograms(codes);
     const minRank = Number(searchParams.get("minRank") || "0");
     const maxRank = Number(searchParams.get("maxRank") || "0");
+    const onlyNewPrograms = searchParams.get("new") === "1";
+    const showDisabledPrograms = searchParams.get("disabled") === "1";
     const queryTokens = searchTokens(searchParams.get("q"));
     const hasSuccessRank = allItems.some((item) => item.latest?.successRank !== null && item.latest?.successRank !== undefined);
     const scoreTypes = multiValues(searchParams, "scoreType");
@@ -106,6 +134,9 @@ export async function GET(request: Request) {
     const universityTypes = multiValues(searchParams, "universityType");
     const feeTypes = multiValues(searchParams, "feeType");
     const educationTypes = multiValues(searchParams, "educationType");
+    const sortKey = searchParams.get("sort") ?? "successRank";
+    const disabledProgramCodes =
+      !showDisabledPrograms || sortKey === "disabled" ? await loadDisabledProgramCodes() : new Set<string>();
 
     const filtered = allItems.filter((item) => {
       if (!item.latest || item.latest.year !== 2025) return false;
@@ -122,13 +153,15 @@ export async function GET(request: Request) {
       if (universityTypes.length > 0 && !universityTypes.includes(item.universityType)) return false;
       if (feeTypes.length > 0 && !feeTypes.includes(item.feeType)) return false;
       if (educationTypes.length > 0 && !educationTypes.includes(item.educationType)) return false;
+      if (onlyNewPrograms && !isNewProgram(item)) return false;
+      if (!showDisabledPrograms && disabledProgramCodes.has(item.code)) return false;
       if (searchParams.get("programCode") && !textIncludes(item.code, searchParams.get("programCode") ?? "")) return false;
       if (hasSuccessRank && minRank > 0 && (!item.latest.successRank || item.latest.successRank < minRank)) return false;
       if (hasSuccessRank && maxRank > 0 && (!item.latest.successRank || item.latest.successRank > maxRank)) return false;
       return true;
     });
 
-    const sorted = sortPrograms(filtered, searchParams.get("sort") ?? "successRank", searchParams.get("dir") ?? "asc");
+    const sorted = sortPrograms(filtered, sortKey, searchParams.get("dir") ?? "asc", disabledProgramCodes);
 
     const optionSource = codes?.length ? allItems : allItems;
 

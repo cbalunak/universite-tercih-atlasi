@@ -12,6 +12,7 @@ import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { formatNumber, formatScore } from "@/lib/format";
 import { estimateSuccessRank } from "@/lib/rank-estimate";
+import { isNewProgram, quotaChangeDirection } from "@/lib/program-status";
 import { atlasYears } from "@/lib/year-config";
 import type { ProgramDto } from "@/types/program";
 import {
@@ -139,6 +140,8 @@ function SortableProgramRow({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+  const isNew = isNewProgram(program);
+  const quotaDirection = quotaChangeDirection(program);
 
   return (
     <tr ref={setNodeRef} style={style} className="h-7 border-t border-[#edf2f0] bg-white align-middle">
@@ -156,7 +159,14 @@ function SortableProgramRow({
       <td className="px-2 py-0.5 text-center font-semibold leading-3 tabular-nums">{index + 1}</td>
       <td className="px-2 py-0.5 leading-3">{program.universityName}</td>
       <td className="px-2 py-0.5 leading-3">
-        <div className="font-semibold">{program.programName}</div>
+        <div className="font-semibold">
+          <span>{program.programName}</span>
+          {isNew ? (
+            <span className="ml-1.5 inline-flex align-middle rounded-sm bg-[#dc2626] px-1 py-0.5 text-[9px] font-bold leading-none text-white">
+              YENİ
+            </span>
+          ) : null}
+        </div>
       </td>
       <td className="px-2 py-0.5 text-center leading-3 whitespace-nowrap tabular-nums">
         {formatNumber(program.years.find((item) => item.year === 2025)?.successRank)}
@@ -170,7 +180,15 @@ function SortableProgramRow({
       <td className="px-2 py-0.5 text-center font-semibold leading-3 whitespace-nowrap text-[#dc2626] tabular-nums">
         {formatNumber(estimateSuccessRank(program))}
       </td>
-      <td className="px-2 py-0.5 text-center leading-3 whitespace-nowrap tabular-nums">{formatNumber(program.latest?.quota)}</td>
+      <td
+        className={[
+          "px-2 py-0.5 text-center leading-3 whitespace-nowrap tabular-nums",
+          quotaDirection === "up" ? "font-bold text-[#16a34a]" : "",
+          quotaDirection === "down" ? "font-bold text-[#dc2626]" : "",
+        ].join(" ")}
+      >
+        {formatNumber(program.latest?.quota)}
+      </td>
       <td className="px-1.5 py-0.5 text-center leading-none whitespace-nowrap">
         <button
           type="button"

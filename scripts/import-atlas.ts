@@ -59,7 +59,7 @@ function toInt(value: unknown) {
 
 function toFloat(value: unknown) {
   if (value === null || value === undefined || value === "" || value === "0") return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0 ? value : null;
 
   const text = String(value).trim();
   const lastComma = text.lastIndexOf(",");

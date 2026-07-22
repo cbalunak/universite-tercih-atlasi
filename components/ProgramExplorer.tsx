@@ -13,7 +13,6 @@ import {
   Loader2,
   RotateCcw,
   Search,
-  Star,
   Upload,
   X,
 } from "lucide-react";
@@ -21,6 +20,7 @@ import { saveAs } from "file-saver";
 import { filterConfig } from "@/lib/filter-config";
 import { formatNumber } from "@/lib/format";
 import { estimateSuccessRank } from "@/lib/rank-estimate";
+import { isNewProgram, quotaChangeDirection } from "@/lib/program-status";
 import type { ProgramDto, ProgramFilters } from "@/types/program";
 import ProgramDetailOverlay from "@/components/ProgramDetailOverlay";
 import PreferenceListOverlay from "@/components/PreferenceListOverlay";
@@ -48,6 +48,8 @@ type ExplorerState = {
   filters: ProgramFilters;
   sort: { key: string; dir: string };
   onlyFavorites: boolean;
+  onlyNewPrograms: boolean;
+  showDisabledPrograms: boolean;
   generalSearch: string;
   userRank: string;
   updatedAt: number;
@@ -146,7 +148,15 @@ function latestRank(program: ProgramDto | undefined) {
 }
 
 function hasUrlState(params: URLSearchParams) {
-  return filterKeys.some((key) => params.has(key)) || params.has("sort") || params.has("dir") || params.has("favorites") || params.has("q");
+  return (
+    filterKeys.some((key) => params.has(key)) ||
+    params.has("sort") ||
+    params.has("dir") ||
+    params.has("favorites") ||
+    params.has("new") ||
+    params.has("disabled") ||
+    params.has("q")
+  );
 }
 
 function readFiltersFromParams(params: URLSearchParams) {
@@ -223,17 +233,6 @@ function createId() {
   return `filtre-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => setDebouncedValue(value), delayMs);
-    return () => window.clearTimeout(timeoutId);
-  }, [delayMs, value]);
-
-  return debouncedValue;
-}
-
 async function readApiResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   if (!response.ok) {
@@ -245,6 +244,52 @@ async function readApiResponse<T>(response: Response): Promise<T> {
   return JSON.parse(text) as T;
 }
 
+function HeaderSearch({
+  value,
+  onCommit,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <label className="relative block w-full max-w-[360px] min-w-[220px] flex-1">
+      <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/75" />
+      <input
+        className="focus-ring h-7 w-full rounded border border-white/55 bg-white/10 pl-7 pr-7 text-xs font-medium text-white placeholder:text-white/70 hover:bg-white/15"
+        value={draft}
+        placeholder="Genel arama"
+        aria-label="Genel arama"
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onCommit(draft.trim());
+          }
+        }}
+      />
+      {draft || value ? (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft("");
+            onCommit("");
+          }}
+          className="focus-ring absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-white/75 hover:bg-white/10 hover:text-white"
+          title="Genel aramayı temizle"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      ) : null}
+    </label>
+  );
+}
+
 export default function ProgramExplorer() {
   const [filters, setFilters] = useState<ProgramFilters>({});
   const [data, setData] = useState<ApiResponse>(emptyResponse);
@@ -253,8 +298,9 @@ export default function ProgramExplorer() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [disabledPrograms, setDisabledPrograms] = useState<string[]>([]);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [onlyNewPrograms, setOnlyNewPrograms] = useState(false);
+  const [showDisabledPrograms, setShowDisabledPrograms] = useState(false);
   const [generalSearch, setGeneralSearch] = useState("");
-  const debouncedGeneralSearch = useDebouncedValue(generalSearch, 350);
   const [userRank, setUserRank] = useState("");
   const [detailCode, setDetailCode] = useState<string | null>(null);
   const [activeList, setActiveList] = useState<PreferenceListRecord | null>(null);
@@ -289,7 +335,12 @@ export default function ProgramExplorer() {
       nextSavedFilters: SavedFilterPreset[],
     ) {
       const nextFilters = normalizeFilters(shouldUseUrl ? readFiltersFromParams(params) : (savedState.filters ?? defaultFilters));
-      const hasSavedResultFilter = hasActiveFilters(nextFilters) || Boolean(savedState.onlyFavorites) || Boolean(savedState.generalSearch);
+      const hasSavedResultFilter =
+        hasActiveFilters(nextFilters) ||
+        Boolean(savedState.onlyFavorites) ||
+        Boolean(savedState.onlyNewPrograms) ||
+        Boolean(savedState.showDisabledPrograms) ||
+        Boolean(savedState.generalSearch);
 
       setFilters(nextFilters);
       setSort(
@@ -303,7 +354,10 @@ export default function ProgramExplorer() {
             : defaultSort,
       );
       setOnlyFavorites(shouldUseUrl ? params.get("favorites") === "1" : (savedState.onlyFavorites ?? false));
-      setGeneralSearch(shouldUseUrl ? (params.get("q") ?? "") : (savedState.generalSearch ?? ""));
+      setOnlyNewPrograms(shouldUseUrl ? params.get("new") === "1" : (savedState.onlyNewPrograms ?? false));
+      setShowDisabledPrograms(shouldUseUrl ? params.get("disabled") === "1" : (savedState.showDisabledPrograms ?? false));
+      const nextGeneralSearch = shouldUseUrl ? (params.get("q") ?? "") : (savedState.generalSearch ?? "");
+      setGeneralSearch(nextGeneralSearch);
       setUserRank(savedState.userRank ?? "");
       setFavorites(nextFavorites);
       setDisabledPrograms(nextDisabledPrograms);
@@ -356,7 +410,9 @@ export default function ProgramExplorer() {
     const controller = new AbortController();
     const params = new URLSearchParams();
     appendFilterParams(params, filters);
-    if (debouncedGeneralSearch.trim()) params.set("q", debouncedGeneralSearch.trim());
+    if (generalSearch.trim()) params.set("q", generalSearch.trim());
+    if (onlyNewPrograms) params.set("new", "1");
+    if (showDisabledPrograms) params.set("disabled", "1");
     params.set("sort", sort.key);
     params.set("dir", sort.dir);
 
@@ -372,16 +428,18 @@ export default function ProgramExplorer() {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [debouncedGeneralSearch, filters, hydratedFromUrl, sort]);
+  }, [filters, generalSearch, hydratedFromUrl, onlyNewPrograms, showDisabledPrograms, sort]);
 
   useEffect(() => {
     if (!hydratedFromUrl) return;
     const params = new URLSearchParams();
     appendFilterParams(params, filters);
-    if (debouncedGeneralSearch.trim()) params.set("q", debouncedGeneralSearch.trim());
+    if (generalSearch.trim()) params.set("q", generalSearch.trim());
     if (sort.key !== defaultSort.key) params.set("sort", sort.key);
     if (sort.dir !== defaultSort.dir) params.set("dir", sort.dir);
     if (onlyFavorites) params.set("favorites", "1");
+    if (onlyNewPrograms) params.set("new", "1");
+    if (showDisabledPrograms) params.set("disabled", "1");
 
     const query = params.toString();
     const nextUrl = query ? `/?${query}` : "/";
@@ -390,11 +448,13 @@ export default function ProgramExplorer() {
       filters,
       sort,
       onlyFavorites,
-      generalSearch: debouncedGeneralSearch,
+      onlyNewPrograms,
+      showDisabledPrograms,
+      generalSearch,
       userRank,
       updatedAt: Date.now(),
     });
-  }, [debouncedGeneralSearch, filters, hydratedFromUrl, onlyFavorites, sort, userRank]);
+  }, [filters, generalSearch, hydratedFromUrl, onlyFavorites, onlyNewPrograms, showDisabledPrograms, sort, userRank]);
 
   const visibleItems = useMemo(() => {
     if (!onlyFavorites) return data.items;
@@ -559,7 +619,7 @@ export default function ProgramExplorer() {
   function changeSort(key: string) {
     setSort((current) => ({
       key,
-      dir: current.key === key && current.dir === "asc" ? "desc" : "asc",
+      dir: current.key === key ? (current.dir === "asc" ? "desc" : "asc") : key === "disabled" ? "desc" : "asc",
     }));
   }
 
@@ -570,7 +630,7 @@ export default function ProgramExplorer() {
     const nextPreset: SavedFilterPreset = {
       id: createId(),
       name,
-      state: { filters, sort, onlyFavorites, generalSearch, userRank },
+      state: { filters, sort, onlyFavorites, onlyNewPrograms, showDisabledPrograms, generalSearch, userRank },
       createdAt: new Date().toISOString(),
     };
 
@@ -584,6 +644,8 @@ export default function ProgramExplorer() {
     setFilters(normalizeFilters(preset.state.filters));
     setSort(preset.state.sort);
     setOnlyFavorites(preset.state.onlyFavorites);
+    setOnlyNewPrograms(preset.state.onlyNewPrograms ?? false);
+    setShowDisabledPrograms(preset.state.showDisabledPrograms ?? false);
     setGeneralSearch(preset.state.generalSearch ?? "");
     setUserRank(preset.state.userRank);
     setFilterSearches({});
@@ -603,6 +665,8 @@ export default function ProgramExplorer() {
       filters,
       sort,
       onlyFavorites,
+      onlyNewPrograms,
+      showDisabledPrograms,
       generalSearch,
       userRank,
       updatedAt: Date.now(),
@@ -667,6 +731,8 @@ export default function ProgramExplorer() {
       setFilters(normalizeFilters(restoredExplorerState.filters));
       setSort(restoredExplorerState.sort ?? defaultSort);
       setOnlyFavorites(restoredExplorerState.onlyFavorites ?? false);
+      setOnlyNewPrograms(restoredExplorerState.onlyNewPrograms ?? false);
+      setShowDisabledPrograms(restoredExplorerState.showDisabledPrograms ?? false);
       setGeneralSearch(restoredExplorerState.generalSearch ?? "");
       setUserRank(restoredExplorerState.userRank ?? "");
       setFavorites(saved.favorites);
@@ -710,26 +776,7 @@ export default function ProgramExplorer() {
               className="hidden"
               onChange={(event) => void restoreUserData(event.target.files?.[0])}
             />
-            <label className="relative block w-full max-w-[360px] min-w-[220px] flex-1">
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/75" />
-              <input
-                className="focus-ring h-7 w-full rounded border border-white/55 bg-white/10 pl-7 pr-7 text-xs font-medium text-white placeholder:text-white/70 hover:bg-white/15"
-                value={generalSearch}
-                placeholder="Genel arama"
-                aria-label="Genel arama"
-                onChange={(event) => setGeneralSearch(event.target.value)}
-              />
-              {generalSearch ? (
-                <button
-                  type="button"
-                  onClick={() => setGeneralSearch("")}
-                  className="focus-ring absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-white/75 hover:bg-white/10 hover:text-white"
-                  title="Genel aramayı temizle"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              ) : null}
-            </label>
+            <HeaderSearch value={generalSearch} onCommit={setGeneralSearch} />
             <button
               type="button"
               onClick={backupUserData}
@@ -749,21 +796,6 @@ export default function ProgramExplorer() {
             >
               <Upload className="h-3 w-3" />
               Geri Yükle
-            </button>
-            <button
-              type="button"
-              onClick={() => setOnlyFavorites((current) => !current)}
-              className={[
-                "focus-ring inline-flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-semibold",
-                onlyFavorites
-                  ? "border-white bg-white text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
-                  : "border-white/55 bg-transparent text-white hover:bg-white/10",
-              ].join(" ")}
-              aria-pressed={onlyFavorites}
-              title="Sadece favori programları göster"
-            >
-              <Star className="h-3 w-3" fill={onlyFavorites ? "currentColor" : "none"} />
-              Favoriler ({favorites.length})
             </button>
             <button
               type="button"
@@ -792,6 +824,8 @@ export default function ProgramExplorer() {
                 setOpenFilterKey(null);
                 setSort(defaultSort);
                 setOnlyFavorites(false);
+                setOnlyNewPrograms(false);
+                setShowDisabledPrograms(false);
                 setGeneralSearch("");
                 setUserRank("");
                 window.localStorage.removeItem(explorerStateKey);
@@ -805,7 +839,6 @@ export default function ProgramExplorer() {
           <div className="mb-4 text-xs text-[#66766f]">
             2025 kayıtları içinde <span className="font-semibold text-[#18201d]">{formatNumber(data.total)}</span> program bulundu
           </div>
-
           <div className="mb-4 grid gap-2 border-b border-[#e2ebe7] pb-4">
             <div className="flex min-w-0 gap-2">
               <input
@@ -830,6 +863,53 @@ export default function ProgramExplorer() {
               >
                 <BookmarkPlus className="h-3.5 w-3.5" />
                 Kaydet
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                onClick={() => setOnlyNewPrograms((current) => !current)}
+                className={[
+                  "focus-ring inline-flex rounded-sm font-bold",
+                  onlyNewPrograms
+                    ? "bg-[#dc2626] text-white"
+                    : "bg-[#f3f5f4] text-[#66766f] hover:bg-[#dc2626] hover:text-white",
+                ].join(" ")}
+                style={{ fontSize: 9.5, lineHeight: "11px", padding: "2px 4px" }}
+                aria-pressed={onlyNewPrograms}
+                title="Yeni programları göster"
+              >
+                YENİ
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDisabledPrograms((current) => !current)}
+                className={[
+                  "focus-ring inline-flex rounded-sm font-bold",
+                  showDisabledPrograms
+                    ? "bg-[#52645d] text-white"
+                    : "bg-[#f3f5f4] text-[#66766f] hover:bg-[#52645d] hover:text-white",
+                ].join(" ")}
+                style={{ fontSize: 9.5, lineHeight: "11px", padding: "2px 4px" }}
+                aria-pressed={showDisabledPrograms}
+                title={showDisabledPrograms ? "Disabled programları gizle" : "Disabled programları göster"}
+              >
+                DISABLED
+              </button>
+              <button
+                type="button"
+                onClick={() => setOnlyFavorites((current) => !current)}
+                className={[
+                  "focus-ring inline-flex rounded-sm font-bold",
+                  onlyFavorites
+                    ? "bg-[var(--color-primary)] text-white"
+                    : "bg-[#f3f5f4] text-[#66766f] hover:bg-[var(--color-primary)] hover:text-white",
+                ].join(" ")}
+                style={{ fontSize: 9.5, lineHeight: "11px", padding: "2px 4px" }}
+                aria-pressed={onlyFavorites}
+                title="Sadece favori programları göster"
+              >
+                FAVORİ
               </button>
             </div>
             {savedFilters.length > 0 ? (
@@ -1052,7 +1132,15 @@ export default function ProgramExplorer() {
                           </button>
                         </th>
                       ))}
-                      <th className="px-1.5 py-2.5 text-center font-semibold whitespace-nowrap">DISABLE</th>
+                      <th className="px-1.5 py-2.5 text-center font-semibold whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => changeSort("disabled")}
+                          className="focus-ring inline-flex max-w-full items-center rounded-sm hover:text-white/80"
+                        >
+                          DISABLE
+                        </button>
+                      </th>
                       <th className="px-1.5 py-2.5 text-center font-semibold whitespace-nowrap">FAVORİ</th>
                       <th className="px-1.5 py-2.5 text-center font-semibold whitespace-nowrap">EKLE</th>
                     </tr>
@@ -1064,6 +1152,8 @@ export default function ProgramExplorer() {
                       const isInPreferenceList = activePreferenceCodes.has(program.code);
                       const isFavorite = favorites.includes(program.code);
                       const isDisabled = disabledPrograms.includes(program.code);
+                      const isNew = isNewProgram(program);
+                      const quotaDirection = quotaChangeDirection(program);
                       const rank2025 = program.latest?.successRank ?? null;
                       const estimatedRank2026 = estimateSuccessRank(program);
                       const rankDirection2025 =
@@ -1108,7 +1198,12 @@ export default function ProgramExplorer() {
                                 !isDisabled && isInPreferenceList ? "font-bold" : "font-medium"
                               }`}
                             >
-                              {program.programName}
+                              <span>{program.programName}</span>
+                              {isNew ? (
+                                <span className="ml-1.5 inline-flex align-middle rounded-sm bg-[#dc2626] px-1 py-0.5 text-[9px] font-bold leading-none text-white">
+                                  YENİ
+                                </span>
+                              ) : null}
                             </div>
                           </td>
                           <td className="px-2 py-1 text-center leading-4 whitespace-nowrap tabular-nums">
@@ -1139,7 +1234,15 @@ export default function ProgramExplorer() {
                           <td className="px-2 py-1 text-center font-semibold leading-4 whitespace-nowrap text-[#dc2626] tabular-nums">
                             {estimatedRank2026 ? formatNumber(estimatedRank2026) : "-"}
                           </td>
-                          <td className="px-2 py-1 text-center leading-4 whitespace-nowrap tabular-nums">{formatNumber(program.latest?.quota)}</td>
+                          <td
+                            className={[
+                              "px-2 py-1 text-center leading-4 whitespace-nowrap tabular-nums",
+                              quotaDirection === "up" && !isDisabled ? "font-bold text-[#16a34a]" : "",
+                              quotaDirection === "down" && !isDisabled ? "font-bold text-[#dc2626]" : "",
+                            ].join(" ")}
+                          >
+                            {formatNumber(program.latest?.quota)}
+                          </td>
                           <td className="px-1.5 py-1 text-center whitespace-nowrap">
                             <button
                               type="button"
